@@ -99,6 +99,7 @@
             this.sampleBox.SizeMode = System.Windows.Forms.PictureBoxSizeMode.StretchImage;
             this.sampleBox.TabIndex = 14;
             this.sampleBox.TabStop = false;
+            this.sampleBox.Click += new System.EventHandler(this.SampleBox_Click);
             // 
             // picShow
             // 

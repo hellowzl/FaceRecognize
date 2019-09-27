@@ -59,7 +59,7 @@ namespace FaceRecognize
             catch { }
         }
         
-        private void sampleBox_Click(object sender, EventArgs e)
+        private void SampleBox_Click(object sender, EventArgs e)
         {
             _currentfdo = _recognizeHelper.GetFaceRectangle(_videoCapture.QueryFrame());
             _currentFaceFlag = 0;
