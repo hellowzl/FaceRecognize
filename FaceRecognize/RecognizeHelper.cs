@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
+using System.Speech.Synthesis;
 
 namespace FaceRecognize
 {
@@ -12,6 +13,7 @@ namespace FaceRecognize
         public string _sampleImagePath;
         public CascadeClassifier _cascadeClassifier;
         public TrainedFaceRecognizer _trainedFaceRecognizer;
+        public string _nameCahce = "";
 
         public RecognizeHelper(string sampleImagePath, string cascadeClassifierPath)
         {
@@ -27,26 +29,30 @@ namespace FaceRecognize
         /// <returns></returns>
         public TrainedFileList SetSampleFacesList()
         {
-            TrainedFileList trainedFileList = new TrainedFileList();
-            DirectoryInfo di = new DirectoryInfo(_sampleImagePath);
-            int i = 0;
-
-            int count = di.GetFiles().Length;
-            trainedFileList.trainedImages = new Mat[count];
-            trainedFileList.trainedLabelOrder = new int[count];
-            trainedFileList.trainedFileName = new string[count];
-
-            foreach (FileInfo fi in di.GetFiles())
+            try
             {
-                Mat mat = new Mat(fi.FullName);
+                TrainedFileList trainedFileList = new TrainedFileList();
+                DirectoryInfo di = new DirectoryInfo(_sampleImagePath);
+                int i = 0;
 
-                trainedFileList.trainedImages[i] = new Mat(fi.FullName);
-                trainedFileList.trainedLabelOrder[i] = i;
-                trainedFileList.trainedFileName[i] = fi.Name.Split('_')[0];
+                int count = di.GetFiles().Length;
+                trainedFileList.trainedImages = new Mat[count];
+                trainedFileList.trainedLabelOrder = new int[count];
+                trainedFileList.trainedFileName = new string[count];
 
-                i++;
+                foreach (FileInfo fi in di.GetFiles())
+                {
+                    Mat mat = new Mat(fi.FullName);
+
+                    trainedFileList.trainedImages[i] = new Mat(fi.FullName);
+                    trainedFileList.trainedLabelOrder[i] = i;
+                    trainedFileList.trainedFileName[i] = fi.Name.Split('_')[0];
+
+                    i++;
+                }
+                return trainedFileList;
             }
-            return trainedFileList;
+            catch (Exception ex) { throw ex; }
         }
 
         /// <summary>
@@ -56,28 +62,32 @@ namespace FaceRecognize
         /// <returns></returns>
         public TrainedFaceRecognizer SetTrainedFaceRecognizer(FaceRecognizerType type)
         {
-            _trainedFaceRecognizer = new TrainedFaceRecognizer();
-            _trainedFaceRecognizer.trainedFileList = SetSampleFacesList();
-
-            switch (type)
+            try
             {
-                case FaceRecognizerType.EigenFaceRecognizer:
-                    _trainedFaceRecognizer.faceRecognizer = new Emgu.CV.Face.EigenFaceRecognizer(80, double.PositiveInfinity);
+                _trainedFaceRecognizer = new TrainedFaceRecognizer();
+                _trainedFaceRecognizer.trainedFileList = SetSampleFacesList();
 
-                    break;
-                case FaceRecognizerType.FisherFaceRecognizer:
-                    _trainedFaceRecognizer.faceRecognizer = new Emgu.CV.Face.FisherFaceRecognizer(80, 3500);
-                    break;
-                case FaceRecognizerType.LBPHFaceRecognizer:
-                    _trainedFaceRecognizer.faceRecognizer = new Emgu.CV.Face.LBPHFaceRecognizer(1, 8, 8, 8, 100);
-                    break;
+                switch (type)
+                {
+                    case FaceRecognizerType.EigenFaceRecognizer:
+                        _trainedFaceRecognizer.faceRecognizer = new Emgu.CV.Face.EigenFaceRecognizer(80, double.PositiveInfinity);
+
+                        break;
+                    case FaceRecognizerType.FisherFaceRecognizer:
+                        _trainedFaceRecognizer.faceRecognizer = new Emgu.CV.Face.FisherFaceRecognizer(80, 3500);
+                        break;
+                    case FaceRecognizerType.LBPHFaceRecognizer:
+                        _trainedFaceRecognizer.faceRecognizer = new Emgu.CV.Face.LBPHFaceRecognizer(1, 8, 8, 8, 100);
+                        break;
+                }
+
+                //根据样例图片训练faceRecognizer
+                _trainedFaceRecognizer.faceRecognizer.Train(_trainedFaceRecognizer.trainedFileList.trainedImages,
+                    _trainedFaceRecognizer.trainedFileList.trainedLabelOrder);
+
+                return _trainedFaceRecognizer;
             }
-
-            //根据样例图片训练faceRecognizer
-            _trainedFaceRecognizer.faceRecognizer.Train(_trainedFaceRecognizer.trainedFileList.trainedImages,
-                _trainedFaceRecognizer.trainedFileList.trainedLabelOrder);
-
-            return _trainedFaceRecognizer;
+            catch (Exception ex) { throw ex; }
         }
 
         /// <summary>
@@ -85,13 +95,14 @@ namespace FaceRecognize
         /// </summary>
         /// <param name="emguImage"></param>
         /// <returns></returns>
-        public faceDetectedObj GetFaceRectangle(Mat emguImage)
+        public FaceDetectedObj GetFaceRectangle(Mat emguImage)
         {
-            faceDetectedObj fdo = new faceDetectedObj();
-            fdo.originalImg = emguImage;
-            List<Rectangle> faces = new List<Rectangle>();
             try
             {
+                FaceDetectedObj fdo = new FaceDetectedObj();
+                fdo.originalImg = emguImage;
+                List<Rectangle> faces = new List<Rectangle>();
+
                 using (UMat ugray = new UMat())
                 {
                     CvInvoke.CvtColor(emguImage, ugray, Emgu.CV.CvEnum.ColorConversion.Bgr2Gray);//灰度化图片
@@ -100,12 +111,11 @@ namespace FaceRecognize
                     Rectangle[] facesDetected = _cascadeClassifier.DetectMultiScale(ugray, 1.1, 10, new Size(20, 20));
                     faces.AddRange(facesDetected);
                 }
+
+                fdo.facesRectangle = faces;
+                return fdo;
             }
-            catch (Exception ex) { }
-
-            fdo.facesRectangle = faces;
-
-            return fdo;
+            catch (Exception ex) { throw ex; }
         }
 
         /// <summary>
@@ -113,43 +123,62 @@ namespace FaceRecognize
         /// </summary>
         /// <param name="emguImage"></param>
         /// <returns></returns>
-        public faceDetectedObj faceRecognize(Mat emguImage)
+        public FaceDetectedObj faceRecognize(Mat emguImage)
         {
-            faceDetectedObj fdo = GetFaceRectangle(emguImage);
-            Image<Gray, byte> tempImg = fdo.originalImg.ToImage<Gray, byte>();
-
-            #region 给识别出的所有人脸画矩形框
-
-            using (Graphics g = Graphics.FromImage(fdo.originalImg.Bitmap))
+            try
             {
-                foreach (Rectangle face in fdo.facesRectangle)
+                FaceDetectedObj fdo = GetFaceRectangle(emguImage);
+                Image<Gray, byte> tempImg = fdo.originalImg.ToImage<Gray, byte>();
+
+                #region 给识别出的所有人脸画矩形框
+
+                using (Graphics g = Graphics.FromImage(fdo.originalImg.Bitmap))
                 {
-                    g.DrawRectangle(new Pen(Color.Red, 2), face);//给识别出的人脸画矩形框
+                    foreach (Rectangle face in fdo.facesRectangle)
+                    {
+                        g.DrawRectangle(new Pen(Color.Red, 2), face);//给识别出的人脸画矩形框
 
-                    Image<Gray, byte> grayFace = tempImg.Copy(face).Resize(100, 100, Emgu.CV.CvEnum.Inter.Cubic);
-                    grayFace._EqualizeHist(); //得到均衡化人脸的灰度图像
+                        Image<Gray, byte> grayFace = tempImg.Copy(face).Resize(100, 100, Emgu.CV.CvEnum.Inter.Cubic);
+                        grayFace._EqualizeHist(); //得到均衡化人脸的灰度图像
 
-                    #region 得到匹配姓名，并画出
+                        #region 得到匹配姓名，并画出
 
-                    Emgu.CV.Face.FaceRecognizer.PredictionResult pr = _trainedFaceRecognizer.faceRecognizer.Predict(grayFace);
-                    string recogniseName = _trainedFaceRecognizer.trainedFileList.trainedFileName[pr.Label].ToString();
+                        Emgu.CV.Face.FaceRecognizer.PredictionResult pr = _trainedFaceRecognizer.faceRecognizer.Predict(grayFace);
 
-                    string name = _trainedFaceRecognizer.trainedFileList.trainedFileName[pr.Label].ToString();
+                        int label = pr.Label;
+                        if (label < 0)
+                            continue;
 
-                    Font font = new Font("宋体", 16, GraphicsUnit.Pixel);
-                    SolidBrush fontLine = new SolidBrush(Color.Yellow);
-                    float xPos = face.X + (face.Width / 2 - (name.Length * 14) / 2);
-                    float yPos = face.Y - 21;
-                    g.DrawString(name, font, fontLine, xPos, yPos);
+                        string recogniseName = _trainedFaceRecognizer.trainedFileList.trainedFileName[pr.Label].ToString();
+                        string name = _trainedFaceRecognizer.trainedFileList.trainedFileName[pr.Label].ToString();
 
-                    #endregion
+                        Font font = new Font("宋体", 16, GraphicsUnit.Pixel);
+                        SolidBrush fontLine = new SolidBrush(Color.Yellow);
+                        float xPos = face.X + (face.Width / 2 - (name.Length * 14) / 2);
+                        float yPos = face.Y - 21;
+                        g.DrawString(name, font, fontLine, xPos, yPos);
 
-                    fdo.names.Add(name);
+                        if (_nameCahce != name)
+                        {
+                            _nameCahce = name;
+                            SpeechSynthesizer synth = new SpeechSynthesizer();
+                            synth.SetOutputToDefaultAudioDevice();
+                            synth.SpeakAsync("欢迎您" + name);
+                        }
+
+                        #endregion
+
+                        fdo.names.Add(name);
+                    }
                 }
-            }
 
-            #endregion
-            return fdo;
+                #endregion
+                return fdo;
+            }
+            catch (Exception ex)
+            {
+                throw ex;
+            }
         }
 
         #region 自定义类及访问类型
@@ -167,7 +196,7 @@ namespace FaceRecognize
             public TrainedFileList trainedFileList;
         }
 
-        public class faceDetectedObj
+        public class FaceDetectedObj
         {
             public Mat originalImg;
             public List<Rectangle> facesRectangle;

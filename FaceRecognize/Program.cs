@@ -14,9 +14,13 @@ namespace FaceRecognize
         [STAThread]
         static void Main()
         {
-            Application.EnableVisualStyles();
-            Application.SetCompatibleTextRenderingDefault(false);
-            Application.Run(new VedioDetect());
+            try
+            {
+                Application.EnableVisualStyles();
+                Application.SetCompatibleTextRenderingDefault(false);
+                Application.Run(new VedioDetect());
+            }
+            catch(Exception ex) { throw ex; }
         }
     }
 }

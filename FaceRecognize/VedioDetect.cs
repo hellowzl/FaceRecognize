@@ -1,39 +1,38 @@
 ﻿using Emgu.CV;
 using Emgu.CV.Structure;
 using System;
+using System.Threading;
 using System.Windows.Forms;
+using static FaceRecognize.RecognizeHelper;
 
 namespace FaceRecognize
 {
     public partial class VedioDetect : Form
     {
-        Mat _mat;//摄像头图像
-        VideoCapture _videoCapture;//摄像头对象
+        VideoCapture _videoCapture;
         RecognizeHelper _recognizeHelper;
 
         int _currentFaceFlag = 0;
-        RecognizeHelper.faceDetectedObj _currentfdo; //点击鼠标时的人脸检测对象
 
-        Timer _timer;
+        //点击鼠标时的人脸检测对象
+        FaceDetectedObj _currentfdo; 
+
+        System.Windows.Forms.Timer _timer;
 
         public VedioDetect()
         {
             InitializeComponent();
 
             try
-            {                
-                _recognizeHelper = new RecognizeHelper(Application.StartupPath + "\\trainedFaces", 
+            {
+                _recognizeHelper = new RecognizeHelper(Application.StartupPath + "\\trainedFaces",
                     Application.StartupPath + "\\trainedModels\\haarcascade_frontalface_default.xml");
-
-                _videoCapture = new VideoCapture();
-                _videoCapture.Start(); //摄像头开始工作
-                _videoCapture.ImageGrabbed += frameProcess; //实时获取图像
 
                 CvInvoke.UseOpenCL = false;
 
-                _timer = new Timer();
+                _timer = new System.Windows.Forms.Timer();
                 _timer.Enabled = true;
-                _timer.Interval = 100;
+                _timer.Interval = 100; //100毫秒检测一次人脸
                 _timer.Tick += new System.EventHandler(this.timer_Tick);
             }
             catch (NullReferenceException ex)
@@ -44,21 +43,49 @@ namespace FaceRecognize
 
         private void frameProcess(object sender, EventArgs arg)
         {
-            _mat = new Mat();
-            _videoCapture.Retrieve(_mat, 0);
-            picShow.Image = _mat.Bitmap;
+            try
+            {
+                Mat mat = new Mat();
+
+                Monitor.Enter(_videoCapture);
+                _videoCapture.Retrieve(mat, 0);
+                Monitor.Exit(_videoCapture);
+
+                picShow.Image = mat.Bitmap;
+            }
+            catch (Exception ex) { throw ex; }
         }
 
         private void timer_Tick(object sender, EventArgs e)
-        {            
+        {
             try
             {
-                //100毫秒检测一次人脸
-                picShow.Image = _recognizeHelper.faceRecognize(_videoCapture.QueryFrame()).originalImg.Bitmap;
+                if (_videoCapture == null)
+                {
+                    _videoCapture = new VideoCapture();
+                    _videoCapture.ImageGrabbed += frameProcess; //实时获取图像
+                    _videoCapture.Start();
+                }
+
+                Monitor.Enter(_videoCapture);
+                Mat mat = _videoCapture.QueryFrame();
+                Monitor.Exit(_videoCapture);
+
+                if (!mat.IsEmpty)
+                {
+                    FaceDetectedObj faceobj = _recognizeHelper.faceRecognize(mat);
+                    if (!faceobj.originalImg.IsEmpty)
+                        picShow.Image = faceobj.originalImg.Bitmap;
+                }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                //throw ex;
+                //_videoCapture.Stop();
+                //_videoCapture.Dispose();                
+            }
         }
-        
+
         private void SampleBox_Click(object sender, EventArgs e)
         {
             _currentfdo = _recognizeHelper.GetFaceRectangle(_videoCapture.QueryFrame());
@@ -71,8 +98,14 @@ namespace FaceRecognize
             try
             {
                 fullname.Text = "";
-                Image<Gray, byte> result = _currentfdo.originalImg.ToImage<Gray, byte>().Copy(_currentfdo.facesRectangle[i]).Resize(100, 100, Emgu.CV.CvEnum.Inter.Cubic);
+
+                Image<Gray, byte> result = _currentfdo.originalImg
+                    .ToImage<Gray, byte>()
+                    .Copy(_currentfdo.facesRectangle[i])
+                    .Resize(100, 100, Emgu.CV.CvEnum.Inter.Cubic);
+
                 result._EqualizeHist();//灰度直方图均衡化
+
                 sampleBox.Image = result.Bitmap;
             }
             catch (Exception ex)
